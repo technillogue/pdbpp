@@ -318,6 +318,41 @@ def test_config_pygments(monkeypatch):
     )
 
 
+@pytest.mark.parametrize("use_pygments", (None, True, False))
+def test_config_missing_pygments(use_pygments, monkeypatch):
+    from pdb import DefaultConfig, Pdb
+
+    class Config(DefaultConfig):
+        pass
+
+    Config.use_pygments = use_pygments
+
+    missing_pygments = sys.modules.copy()
+    missing_pygments["pygments"] = None
+    monkeypatch.setattr("sys.modules", missing_pygments)
+
+    class PdbForMessage(Pdb):
+        messages = []
+
+        def message(self, msg):
+            self.messages.append(msg)
+
+    pdb_ = PdbForMessage(Config=Config)
+
+    with pytest.raises(ImportError):
+        pdb_._get_pygments_formatter()
+    assert pdb_._get_source_highlight_function() is False
+    assert pdb_.format_source("print(42)") == "print(42)"
+
+    if use_pygments is True:
+        assert pdb_.messages == ['Could not import pygments, disabling.']
+    else:
+        assert pdb_.messages == []
+
+    # Cover branch for cached _highlight property.
+    assert pdb_.format_source("print(42)") == "print(42)"
+
+
 def test_config_pygments_deprecated_use_terminal256formatter(monkeypatch):
     from pdb import DefaultConfig, Pdb
     import pygments.formatters
