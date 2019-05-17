@@ -539,18 +539,60 @@ class Pdb(pdb.Pdb, ConfigurableClass, object):
         return s
 
     def _get_source_highlight_function(self):
-        from importlib import import_module
-
-        def import_string(dotted_path):
-            module_path, class_name = dotted_path.rsplit('.', 1)
-            module = import_module(module_path)
-            return getattr(module, class_name)
-
         try:
             import pygments
             import pygments.lexers
         except ImportError:
             return False
+
+        try:
+            pygments_formatter = self._get_pygments_formatter()
+        except Exception as exc:
+            self.message("pdb++: could not setup Pygments, disabling: {}".format(
+                exc
+            ))
+            return False
+
+        lexer = pygments.lexers.PythonLexer(stripnl=False)
+
+        def syntax_highlight(src):
+            return pygments.highlight(src, lexer, pygments_formatter)
+
+        return syntax_highlight
+
+    def _get_pygments_formatter(self):
+        if hasattr(self.config, 'formatter'):
+            # Deprecated, never documented.
+            # Not optimal, since it involves creating the formatter in
+            # the config already, although it might never be used.
+            return self.config.formatter
+
+        if self.config.pygments_formatter_class:
+            from importlib import import_module
+
+            def import_string(dotted_path):
+                module_path, class_name = dotted_path.rsplit('.', 1)
+                module = import_module(module_path)
+                return getattr(module, class_name)
+
+            Formatter = import_string(self.config.pygments_formatter_class)
+        else:
+            import pygments.formatters
+
+            if getattr(self.config, "use_terminal256formatter", None) is not None:
+                # Deprecated, never really documented (only changelog).
+                if self.config.use_terminal256formatter:
+                    Formatter = pygments.formatters.Terminal256Formatter
+                else:
+                    Formatter = pygments.formatters.TerminalFormatter
+            else:
+                term = os.environ.get("TERM", "")
+                if term in ("xterm-kitty",):
+                    Formatter = pygments.formatters.TerminalTrueColorFormatter
+                elif "256color" in term:
+                    Formatter = pygments.formatters.Terminal256Formatter
+                else:
+                    Formatter = pygments.formatters.TerminalFormatter
 
         formatter_kwargs = {
             # Only used by TerminalFormatter.
@@ -560,43 +602,7 @@ class Pdb(pdb.Pdb, ConfigurableClass, object):
         }
         formatter_kwargs.update(self.config.pygments_formatter_kwargs)
 
-        if hasattr(self.config, 'formatter'):
-            # Deprecated, never documented.
-            # Not optimal, since it involves creating the formatter in
-            # the config already, although it might never be used.
-            pygments_formatter = self.config.formatter
-        else:
-            if self.config.pygments_formatter_class:
-                Formatter = import_string(self.config.pygments_formatter_class)
-            else:
-                import pygments.formatters
-
-                if hasattr(self.config, "use_terminal256formatter"):
-                    # Deprecated, never really documented (only changelog).
-                    Formatter = pygments.formatters.Terminal256Formatter
-                else:
-                    term = os.environ.get("TERM")
-                    if term in ("xterm-kitty",):
-                        Formatter = pygments.formatters.TerminalTrueColorFormatter
-                    elif "256color" in term:
-                        Formatter = pygments.formatters.Terminal256Formatter
-                    else:
-                        Formatter = pygments.formatters.TerminalFormatter
-
-            try:
-                pygments_formatter = Formatter(**formatter_kwargs)
-            except Exception as exc:
-                self.message("pdb++: could not setup Pygments, disabling: {}".format(
-                    exc
-                ))
-                return False
-
-        lexer = pygments.lexers.PythonLexer(stripnl=False)
-
-        def syntax_highlight(src):
-            return pygments.highlight(src, lexer, pygments_formatter)
-
-        return syntax_highlight
+        return Formatter(**formatter_kwargs)
 
     def format_source(self, src):
         if self.config.use_pygments is False:
