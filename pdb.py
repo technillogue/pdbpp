@@ -698,6 +698,7 @@ class Pdb(pdb.Pdb, ConfigurableClass, object):
         if line[:1] == '!': line = line[1:]
         locals = self.curframe_locals
         globals = self.curframe.f_globals
+        namespace = {**globals, **locals}
         try:
             code = compile(line + '\n', '<stdin>', 'single')
             save_stdout = sys.stdout
@@ -707,7 +708,7 @@ class Pdb(pdb.Pdb, ConfigurableClass, object):
                 sys.stdin = self.stdin
                 sys.stdout = self.stdout
                 sys.displayhook = self.displayhook
-                exec(code, globals, locals)
+                exec(code, namespace)
             finally:
                 sys.stdout = save_stdout
                 sys.stdin = save_stdin
