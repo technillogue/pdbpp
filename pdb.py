@@ -695,7 +695,26 @@ class Pdb(pdb.Pdb, ConfigurableClass, object):
 
     def default(self, line):
         self.history.append(line)
-        return super(Pdb, self).default(line)
+        if line[:1] == '!': line = line[1:]
+        locals = self.curframe_locals
+        globals = self.curframe.f_globals
+        try:
+            code = compile(line + '\n', '<stdin>', 'single')
+            save_stdout = sys.stdout
+            save_stdin = sys.stdin
+            save_displayhook = sys.displayhook
+            try:
+                sys.stdin = self.stdin
+                sys.stdout = self.stdout
+                sys.displayhook = self.displayhook
+                exec(code, globals, locals)
+            finally:
+                sys.stdout = save_stdout
+                sys.stdin = save_stdin
+                sys.displayhook = save_displayhook
+        except:
+            exc_info = sys.exc_info()[:2]
+            self.error(traceback.format_exception_only(*exc_info)[-1].strip())
 
     def do_help(self, arg):
         try:

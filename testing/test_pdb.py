@@ -3092,7 +3092,7 @@ def test_python_m_pdb_usage():
     assert err == ""
     assert "usage: pdb.py" in out
 
-
+@pytest.mark.skip
 def test_python_m_pdb_uses_pdbpp(tmphome):
     import subprocess
 
